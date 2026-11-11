@@ -21,7 +21,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="EvalForge API",
     version="0.1.0",
-    description="Phase 1 authentication and project foundation.",
+    description="Authentication, projects, canonical telemetry ingestion, and trace reads.",
     lifespan=lifespan,
 )
 app.include_router(api_router)
