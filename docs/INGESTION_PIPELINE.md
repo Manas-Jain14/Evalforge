@@ -1,6 +1,6 @@
 # Shared Ingestion Pipeline
 
-**Status:** SDK and JSON/JSONL must converge on one canonical pipeline (**CONFIRMED**). Detailed synchronous transaction and partial-failure policies below are proposals and remain subject to validation.
+**Status:** SDK and JSON/JSONL convergence, synchronous bounded processing, atomic all-or-nothing batches, and record-level idempotency using stable trace/span/event identifiers are **CONFIRMED**. Exactly eight initial logical database tables are approved; no `ingestion_batches` table is permitted. See [ADR 007](decisions/007-atomic-ingestion-and-record-level-idempotency.md).
 
 ## Goal
 
@@ -35,9 +35,9 @@ flowchart LR
 5. **Normalization:** map source representations to canonical UUID/timestamp/attribute/status conventions. Do not infer missing sensitive information or silently fabricate required values.
 6. **Referential integrity:** resolve trace, span, parent, and event links within batch or existing same-project data. Reject cross-trace/project references and cycles.
 7. **Semantic validation:** enforce nonnegative durations/tokens, valid time order, extensible operation values, and optional provider/model fields.
-8. **Idempotency:** apply only the project-scoped policy approved for the schema. Durable batch-level replay/conflict handling is not provided by the confirmed eight-table design; do not claim it until a persistent mechanism is approved.
-9. **Persistence:** use a transaction where practical to preserve relationships. Upload metadata/status is recorded in `uploads`; the DB is initially the telemetry system of record.
-10. **Result:** return sanitized counts and record-level or batch-level errors without secrets. Do not claim successful persistence when it failed.
+8. **Idempotency:** use the stable UUID of each trace, span, and event as its record identity. Existing ID plus identical canonical content is a duplicate/no-op; existing ID plus different content is a conflict. `batch_id` may correlate a request but is not persisted as an idempotency key.
+9. **Persistence:** after validating the entire batch, write all new records in one transaction. Any failure rolls back every write. Upload metadata/status is recorded in `uploads`; the DB is the telemetry system of record.
+10. **Result:** return sanitized counts for accepted and identical duplicate records after commit, or a structured error for a rejected batch. Never report partial acceptance or success before commit.
 
 ## Shared behavior and source differences
 
@@ -51,29 +51,19 @@ flowchart LR
 
 An SDK-supplied `project_id` is not authoritative. Historical uploads are not allowed to bypass owner checks.
 
-## Batch and partial failure policy
+## Batch and failure policy
 
 **PROPOSED:** process reasonably sized uploads synchronously in the MVP and reject over-limit requests with a clear size/count error. Avoid background queues absent a demonstrated requirement.
 
-**UNRESOLVED:** whether a batch is all-or-nothing or supports partial record acceptance. Prefer atomic per batch for referential integrity and predictable retries; if partial acceptance is chosen, response must identify accepted/rejected records and retry semantics must prevent duplicates. Decide and test before freezing the endpoint. Atomic telemetry writes alone do not provide durable batch replay detection: the idempotency key and payload fingerprint also need persistent storage.
+**CONFIRMED:** process each batch atomically, all-or-nothing. The complete input must pass parsing, schema, semantic, and relationship validation before inserts begin. Persist the batch's new records in one transaction; duplicate records with identical canonical content are no-ops, but conflicting reuse of any trace/span/event ID rejects the entire batch and rolls back all new records in it. There is no partial success mode.
 
 Limits must be configurable/documented and based on measured PostgreSQL/request behavior. There are no approved numeric limits yet.
 
-## Idempotency and duplicates
+## Record-level idempotency
 
-The SDK envelope is proposed to contain `schema_version` and `batch_id`, but a field in a request is not durable idempotency by itself. The current eight-table schema has no SDK batch ledger, so exact replay detection, payload-fingerprint comparison, and batch-level outcome recovery cannot be guaranteed by it.
+Use client-stable UUIDs already present on canonical trace/span/event records; do not add an idempotency table or other ninth logical table. For each existing ID, compare normalized canonical content: identical content counts as duplicate/no-op; different content is a conflict. The conflict invalidates and rolls back the entire incoming batch. Enforce IDs with database uniqueness and handle concurrent inserts by catching the resulting integrity conflict, rolling back, and determining/retrying only under the same canonical comparison rules.
 
-### Options and recommendation (PROPOSED / UNRESOLVED)
-
-| Option | What it provides | Limitations |
-|---|---|---|
-| **A. Proposed ninth `ingestion_batches` table** | Unique `(project_id, batch_id)` plus a payload fingerprint and processing status/counts can distinguish an identical replay from changed-content reuse, persist an outcome, and cover empty batches | Requires project-owner approval to change the confirmed eight-table design; transaction/concurrency, retention, and partial-result detail still need finalization |
-| **B. Record-level stable IDs within the eight tables** | Stable project-scoped trace/span/event IDs can make repeated record inserts idempotent and avoid an extra table | Cannot identify an empty-batch replay or determine that all records from a batch were previously accepted; partial batches and same-ID/different-content conflicts need a separate policy |
-| **C. Reuse `uploads` or project JSONB** | Avoids a new named table | `uploads` conflates file submissions with SDK batches; JSONB markers have poor uniqueness, concurrency, growth, and retention characteristics. Neither is recommended |
-
-**Recommendation:** A is the cleanest durable batch-level solution. Proposed ledger fields are `id`, `project_id`, `batch_id`, `payload_fingerprint`, `processing_status`, `accepted_count`, `rejected_count`, `created_at`, and `completed_at`, with unique `(project_id, batch_id)`. Under an all-or-nothing policy, ledger completion and telemetry writes should commit atomically; concurrent replays should resolve to the committed result or an explicit in-progress state. Partial acceptance requires enough persisted outcome detail to make retries safe. This is a proposal only; **the ninth table is not approved and must not be treated as part of the confirmed schema**.
-
-Until approved, the eight-table fallback is record-level stable IDs, explicitly with the limitations above. Scope of IDs, retention, fingerprint canonicalization, duplicate conflict response, and outcome replay are unresolved. Do not promise durable batch-level idempotency without owner approval and corresponding persistence/tests.
+This policy makes telemetry inserts idempotent by record, not by request. It cannot retrieve a prior batch response, detect a repeated empty batch, or distinguish two batch envelopes containing the same record set. A supplied `batch_id` is correlation metadata only and has no persisted uniqueness or fingerprint. These limitations are accepted to preserve the exactly-eight-table schema.
 
 ## Upload processing status
 
@@ -85,13 +75,13 @@ The MVP's synchronous path may transition a metadata record through `received` â
 - Unsupported schema version: explicit unsupported-version error.
 - Unauthorized project/key: deny without exposing whether another project's records exist.
 - Payload too large: reject before full parse/persistence.
-- Conflicting idempotency replay: explicit conflict only if the approved persistence design can detect it; otherwise do not claim batch-level conflict detection.
-- Database failure: rollback according to chosen transaction policy, return server failure, and permit safe retry.
-- Partial failure (if adopted): report per-record status; do not disguise as complete success.
+- Same record IDs and identical canonical content: treat as duplicate/no-op.
+- Same record ID with different canonical content: reject the whole batch with a conflict; no rows from that batch are committed.
+- Database failure or any invalid record: roll back the whole batch and return a sanitized error; a retry is safe under the stable-ID duplicate rules.
 - Unexpected errors: log correlation ID and sanitized diagnostic server-side; never include secrets in client error.
 
 ## Tests required
 
-Equivalent SDK/JSON/JSONL fixtures normalize to equivalent canonical records; malformed/oversized input; future schema; timestamp and count constraints; missing/cross-project parents; cycles; approved idempotency behavior (batch replay/fingerprint/conflict if a ledger is approved, or record-level replay and documented limitations if it is not); transaction rollback; upload ownership; accurate processing status; and privacy-safe errors/logs. Do not write tests that assert durable batch-level replay until an approved schema/persistence design supports it.
+Equivalent SDK/JSON/JSONL fixtures normalize to equivalent canonical records; malformed/oversized input; future schema; timestamp and count constraints; missing/cross-project parents; cycles; identical stable-ID replay; conflicting same-ID content; atomic rollback when one record conflicts or fails validation; concurrent duplicate insertion; upload ownership; accurate processing status; and privacy-safe errors/logs. Do not test batch-ID deduplication or batch-outcome recovery: no batch ledger exists.
 
 See [API Contracts](API_CONTRACTS.md), [Telemetry Schema](TELEMETRY_SCHEMA.md), and [Database Schema](DATABASE_SCHEMA.md).

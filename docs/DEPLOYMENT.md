@@ -1,20 +1,21 @@
 # Deployment and Local Development
 
-**Status:** Docker Compose and PostgreSQL for local development are **CONFIRMED**. Production host, topology, retention, and operational targets are **UNRESOLVED**. No deployment configuration or application currently exists in this documentation-only repository.
+**Status:** Phase 1 local development uses the owner's existing native PostgreSQL 18 installation on Windows and the existing `evalforge` database. Production host, topology, retention, and operational targets are **UNRESOLVED**.
 
 ## Local development target
 
-The initial local environment should run the FastAPI application, PostgreSQL, and React frontend with Docker Compose or documented local equivalents. Keep the MVP as one backend deployment and one PostgreSQL database; do not add a queue, cache, object store, or orchestration system without a concrete requirement.
+For Phase 1, PostgreSQL 18 is already installed natively and the owner has created `evalforge` through pgAdmin 4. Do not reinstall/configure the server or manually create application tables in pgAdmin; Alembic manages application schema changes. The FastAPI process runs from the Python virtual environment.
 
-Expected developer workflow once implementation exists:
+Windows PowerShell workflow:
 
-1. Copy placeholder names from `.env.example` into a local untracked environment file.
-2. Start PostgreSQL and application processes via documented Compose commands.
-3. Apply Alembic migrations explicitly.
-4. Run pytest/backend, SDK, and frontend test commands.
-5. Exercise a synthetic trace ingestion and dashboard query.
+1. Copy root `.env.example` to root `.env` if it does not exist.
+2. Enter the local `postgres` role password in `DATABASE_URL` (URL-encode special characters) and set a local JWT secret.
+3. Create and activate a Python virtual environment from `backend`.
+4. Install `backend/requirements.txt`.
+5. From `backend`, run `alembic upgrade head` against the configured `evalforge` database.
+6. Start `uvicorn app.main:app --reload`; run `python -m pytest` separately.
 
-These are proposed steps, not commands verified in the current repository.
+The settings loader resolves `../.env` when commands run from `backend`. Confirm `DATABASE_URL` points to `evalforge` before applying migrations. Do not run migrations against another database without explicit approval.
 
 ## Configuration categories
 
@@ -29,15 +30,15 @@ Exact variable names are not yet fixed. Document names and validation in impleme
 | SDK | Hosted/local ingestion endpoint (client-side configuration) |
 | Security | API-key hash pepper if selected; secret manager reference |
 
-`.env.example`, if created during implementation, must contain placeholders only. Production secrets belong in the host's secret manager, not image layers, source control, frontend bundles, or logs.
+The root `.env.example` contains a password-free PostgreSQL URL and placeholder JWT secret. Production secrets belong in the host's secret manager, not source control, frontend bundles, or logs.
 
 ## Database and migrations
 
-Use PostgreSQL with JSONB. Apply Alembic migrations as an explicit controlled step before serving new code. Backups and restore tests are required before production telemetry is considered durable. Restrict network access and use least-privilege credentials. Migration rollback/forward-fix procedures must be defined for the chosen host.
+Use PostgreSQL with JSONB. Apply Alembic migrations as an explicit controlled step before serving new code. Never use application startup table creation. Backups and restore tests are required before production telemetry is considered durable. Restrict network access and use least-privilege credentials. Migration rollback/forward-fix procedures must be defined for the chosen host.
 
 ## Upload storage and retention
 
-The initial `uploads` table stores metadata/status; no external object storage is assumed. The implementation must decide whether raw files are streamed/temporarily staged and promptly deleted or retained under a documented policy. Do not silently depend on local container disk for durable file storage. Set file size, processing time, retention, and cleanup policy before production use.
+The initial `uploads` table stores metadata/status; no external object storage is assumed. The implementation must decide whether raw files are streamed/temporarily staged and promptly deleted or retained under a documented policy. Do not silently depend on ephemeral local disk for durable file storage. Set file size, processing time, retention, and cleanup policy before production use.
 
 ## Production readiness checklist
 

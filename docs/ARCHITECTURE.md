@@ -52,7 +52,7 @@ These are logical modules within one FastAPI application and PostgreSQL database
 3. Parse source representation and check request/file limits and schema version.
 4. Normalize into canonical trace/span/event records.
 5. Validate IDs, parent relationships, timestamps, project associations, and constraints.
-6. Apply batch idempotency/duplicate policy and persist atomically or according to an explicitly documented partial-failure contract.
+6. Apply the confirmed stable record-ID duplicate policy and persist the entire batch atomically; any conflict rolls back the batch.
 7. Return structured processing status. Detailed sequencing and open decisions are in [Ingestion Pipeline](INGESTION_PIPELINE.md).
 
 ## Persistence
@@ -74,7 +74,7 @@ Analytics are calculated deterministically from canonical telemetry. Provider/mo
 | SDK | Python package, manual instrumentation initially |
 | AI investigations | Google Gemini API, on-demand only |
 | Tests | pytest backend/SDK; frontend tooling selected at implementation |
-| Local development | Docker Compose and PostgreSQL container |
+| Phase 1 local development | Existing native PostgreSQL 18 instance on Windows; database `evalforge` managed by the owner through pgAdmin 4 |
 
 ## Quality attributes
 

@@ -2,7 +2,7 @@
 
 ## Project status and architecture
 
-EvalForge is currently a documentation-only repository. The intended product is a Python-first LLM observability and investigation platform using a modular monolith: one FastAPI backend, PostgreSQL, a React/TypeScript frontend, a manually instrumented Python SDK, deterministic analytics, and explicitly requested Gemini investigations. Read the relevant docs before implementing anything; proposals in the docs are not automatically approved implementation facts.
+EvalForge has a Phase 1 FastAPI backend foundation for authentication and owner-scoped projects. Telemetry ingestion, SDK, analytics, investigations, and frontend remain planned. The intended product is a Python-first LLM observability and investigation platform using a modular monolith: one FastAPI backend, PostgreSQL, a React/TypeScript frontend, a manually instrumented Python SDK, deterministic analytics, and explicitly requested Gemini investigations. Read the relevant docs before implementing anything; proposals in the docs are not automatically approved implementation facts.
 
 Start with [Architecture](docs/ARCHITECTURE.md), then consult the focused schema, API, ingestion, SDK, design, security, testing, and deployment documents. ADR status is explicit in [docs/decisions](docs/decisions/).
 
@@ -22,9 +22,9 @@ Start with [Architecture](docs/ARCHITECTURE.md), then consult the focused schema
 - Do not use fake production telemetry or commit credentials, private prompts, or customer data.
 - Update directly related documentation when behavior, contracts, schema, security, or developer workflows change.
 
-## Expected organization (proposed)
+## Current backend organization
 
-The backend should group routes, schemas, services, and persistence by domain; shared ingestion normalization is one boundary used by SDK and upload adapters. Frontend pages should be organized around product workflows and reusable design-system elements. The Python SDK should remain an installable package separate from the server. Exact package layout is unresolved until repository implementation begins; do not create a speculative structure without validating it.
+The Phase 1 backend lives under `backend/app`: API routes, core configuration/security/dependencies, SQLAlchemy DB/models, Pydantic schemas, and domain services. Keep route handlers thin and extend these patterns only for implemented domains. Future frontend pages should be organized around product workflows and reusable design-system elements; the Python SDK should remain separate from the server.
 
 ## Database and migrations
 

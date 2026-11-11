@@ -57,7 +57,7 @@ End-to-end continuity is more important than a broad but disconnected feature se
 | Exploration | Project trace list/detail with nested spans and timing; event search/list |
 | Analytics | Volume, latency quantiles, error rate, token use, available estimated cost, basic deterministic insights |
 | Investigation | On-demand Gemini with bounded evidence package, validated report, history |
-| Operations | Tests, local Docker Compose/PostgreSQL setup, deployment instructions |
+| Operations | Tests, native PostgreSQL local development, deployment instructions |
 
 ## 6. Product principles
 
@@ -75,7 +75,7 @@ Validate during implementation; these are not targets yet:
 - A new developer can go from project creation to visible SDK trace using the documented quickstart.
 - Both SDK and file-upload paths produce equivalent canonical records.
 - A trace can be reconstructed with correct parent relationships and durations.
-- Duplicate handling follows the approved persistence policy; do not claim durable batch-level replay protection unless its persistence mechanism is approved and implemented.
+- Ingestion uses the approved all-or-nothing transaction and stable trace/span/event IDs; identical record replay is a no-op and conflicting ID content rejects the full batch. No batch ledger exists.
 - Deterministic metrics can be reconciled against fixture data.
 - Investigation claims reference persisted evidence or clearly state insufficiency.
 - Dashboard core functions remain usable when Gemini is unavailable.

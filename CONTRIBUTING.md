@@ -1,6 +1,6 @@
 # Contributing
 
-EvalForge is at the documentation-foundation stage. Contributions should move the project toward a small, secure, end-to-end Python-first MVP without obscuring what is implemented versus planned.
+EvalForge has a Phase 1 backend foundation for authentication and project management; the rest of the product is planned. Contributions should extend the small, secure, end-to-end Python-first MVP without obscuring what is implemented versus planned.
 
 ## Before changing anything
 
