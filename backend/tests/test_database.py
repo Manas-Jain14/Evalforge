@@ -47,13 +47,16 @@ def test_user_deletion_does_not_cascade_projects(db_engine):
             session.commit()
 
 
-def test_initial_alembic_revision_is_registered_without_running_it():
+def test_alembic_revision_chain_includes_phase_two_without_running_it():
     script = ScriptDirectory("alembic")
-    revision = script.get_revision("head")
+    initial = script.get_revision("0001_users_projects")
+    head = script.get_revision("head")
 
-    assert revision is not None
-    assert revision.revision == "0001_users_projects"
-    assert revision.down_revision is None
+    assert initial is not None
+    assert initial.down_revision is None
+    assert head is not None
+    assert head.revision == "0002_api_keys_telemetry"
+    assert head.down_revision == "0001_users_projects"
 
 
 def test_database_dependency_closes_sessions_after_request(db_engine, monkeypatch):

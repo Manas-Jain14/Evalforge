@@ -4,7 +4,7 @@
 
 EvalForge is a planned developer-first platform for observing, debugging, and investigating applications powered by large language models. It is intended to make requests, operations, failures, latency, token usage, estimated cost, and supporting evidence understandable in one place.
 
-> **Project status:** Phase 1 backend foundation is implemented. Telemetry ingestion, SDK, analytics, investigations, and frontend remain planned.
+> **Project status:** Phase 2 ingest and trace read exist; SDK, uploads, analytics, frontend, and Gemini do not.
 
 ## The problem
 
@@ -74,7 +74,8 @@ docs/
 |---|---|
 | Product and technical documentation | Created |
 | Backend authentication and project management | Phase 1 implemented; see setup below |
-| Telemetry ingestion, SDK, analytics, investigation, frontend | Planned; not implemented |
+| Canonical trace ingestion and trace reads | Phase 2 implemented |
+| SDK, uploads, analytics, investigation, frontend | Planned; not implemented |
 | Production deployment | Not implemented |
 
 These labels describe the repository state, not a feature-completeness claim. Update them only when supported by repository evidence.
