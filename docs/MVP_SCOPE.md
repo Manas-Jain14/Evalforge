@@ -33,9 +33,9 @@ Gemini remains an MVP capability, but it is last in delivery priority and may be
 7. Trace explorer/detail with nested spans and waterfall; event explorer.
 8. Deterministic overview/latency/usage analytics and basic explainable anomaly insights.
 9. User-initiated Gemini investigations and persisted reports with evidence references.
-10. Basic frontend, tests, local Docker Compose setup, and deployment documentation.
+10. Basic frontend, tests, local development using native PostgreSQL, and deployment documentation.
 
-Durable batch-level idempotency is not implementable from the current eight-table proposal alone. The recommended ledger is a proposed ninth table and requires owner approval; until then, document the limitations of a record-level stable-ID fallback. See [Database Schema](DATABASE_SCHEMA.md).
+Ingestion is all-or-nothing and uses stable trace/span/event IDs for record-level idempotency. Exactly eight logical tables are approved; do not add `ingestion_batches`. Batch IDs do not provide persisted batch-level replay or outcome recovery. See [Database Schema](DATABASE_SCHEMA.md) and [ADR 007](decisions/007-atomic-ingestion-and-record-level-idempotency.md).
 
 ## Excluded from MVP
 
@@ -67,7 +67,7 @@ The exact dependencies and order are described in [Implementation Plan](IMPLEMEN
 
 - An unowned project/trace/key cannot be read or changed by another user.
 - SDK project identity derives only from key verification.
-- Idempotency behavior matches the approved persistence design; claim batch-level replay/conflict guarantees only if the ledger is approved and implemented, otherwise document the record-level fallback limitations.
+- Ingestion commits all-or-nothing; identical stable-ID records are no-ops, conflicting content rolls back the full batch, and no batch ledger is introduced.
 - JSON/JSONL and SDK data normalize to the same canonical semantics.
 - Parent span/event relationships cannot cross trace or project.
 - Duration/token constraints are enforced; generic spans need no model fields.

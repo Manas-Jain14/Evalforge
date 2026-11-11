@@ -1,6 +1,6 @@
 # Database Schema
 
-**Status:** PostgreSQL and eight initial tables are **CONFIRMED** requirements. The columns and constraints below are a **PROPOSED initial design** requiring implementation-time review. This is documentation, not a migration or ORM model.
+**Status:** PostgreSQL and exactly eight initial logical tables are **CONFIRMED**. There is no `ingestion_batches` table. Atomic all-or-nothing processing and record-level idempotency using stable trace/span/event IDs are **CONFIRMED**; see [ADR 007](decisions/007-atomic-ingestion-and-record-level-idempotency.md). The columns and constraints below are a **PROPOSED initial design** requiring implementation-time review. This is documentation, not a migration or ORM model.
 
 ## Conventions
 
@@ -173,20 +173,14 @@ Every project-owned record carries `project_id` directly or through a parent. Us
 
 Database constraints can enforce the stored single-owner relationship for uploads and analysis reports using the composite owner FKs above; they do not replace mandatory application-level authentication and authorization checks on every route and operation. The MVP does not introduce team membership.
 
-## Batch idempotency schema decision (PROPOSED / UNRESOLVED)
+## Idempotency and transaction policy (CONFIRMED)
 
-The confirmed initial design contains eight tables and has no durable SDK batch ledger. `uploads` identifies historical upload attempts, not SDK batches, and should not be overloaded to serve both transports.
+The initial schema contains exactly the eight logical tables listed above; do not add `ingestion_batches`. Ingestion is all-or-nothing: validate the entire batch and its references, then persist all new trace/span/event records in one database transaction. Any validation, integrity, or persistence failure rolls back the whole batch; there is no partial-acceptance response.
 
-| Option | Benefits | Limitations |
-|---|---|---|
-| **A. Add proposed `ingestion_batches` table** | Durable project-scoped `(project_id, batch_id)` uniqueness; stores payload fingerprint, processing status, accepted/rejected counts and timestamps; detects identical replay versus changed-content reuse, including an empty batch | Adds a ninth table and requires owner approval; transaction, concurrent-claim, failed-batch retention, and replay-response details need design |
-| **B. Record-level idempotency with stable IDs** | Can stay within the eight-table schema by using stable project-scoped trace/span/event IDs and existing unique keys; replay of existing records can avoid duplicate rows | Does not represent batch completion or fingerprint, cannot identify an empty-batch replay, and cannot reliably distinguish a complete replay from partial acceptance; conflicting same-ID content needs explicit comparison policy |
-| **C. Reuse `uploads` or store batch markers in project JSONB** | Avoids introducing a named ninth table | `uploads` is user/file-specific and does not model SDK batch authentication/lifecycle; JSONB markers have unbounded growth, awkward concurrency/uniqueness, and poor query/retention semantics. Neither is recommended as a durable ledger |
+Use stable client-provided UUIDs for traces, spans, and events as record identities. A retry of already persisted records with the same IDs and identical canonical content is a duplicate/no-op; reuse of any existing ID with different content is a conflict and rolls back the entire incoming batch. Database primary-key/unique constraints are the final concurrency guard. The service must compare duplicate records' canonical content and ensure all references are valid before returning an idempotent success. Do not infer identity from names or timestamps.
 
-**Recommendation:** Option A is the clearest durable batch-level design. A proposed table would include UUID `id`, `project_id`, `batch_id`, `payload_fingerprint`, `processing_status`, `accepted_count`, `rejected_count`, `created_at`, and `completed_at`, with `UNIQUE (project_id, batch_id)` and a project FK. A successful ledger record and its telemetry writes should commit atomically under the chosen all-or-nothing policy; concurrent reuse must resolve to the persisted result or an explicit in-progress outcome. If partial acceptance is selected, persist enough outcome detail to make retries unambiguous. This is a recommendation only: **do not add the table to the confirmed schema until the project owner approves the ninth-table change**.
-
-Until that decision, record-level stable IDs (Option B) are the only reasonable eight-table fallback, with the limitations above. Do not claim durable batch-level idempotency or exact replay/conflict behavior without an approved persistence design.
+This record-level design does not retain a batch ID, batch fingerprint, or batch outcome. Therefore it cannot independently recognize an empty batch replay or retrieve a historical batch response. SDK `batch_id`, if included for request correlation, is not a durable idempotency key and does not alter the exactly-eight-table schema.
 
 ## Open database decisions
 
-Account recovery, cascades/retention, external-ID uniqueness, token-total reconciliation, canonical reporting currency/conversion, index tuning, upload file retention, report-evidence normalization, and approval of a durable batch ledger remain unresolved. Validate query plans before adding broad JSONB indexes or extra infrastructure.
+Account recovery, cascades/retention, external-ID uniqueness, token-total reconciliation, canonical reporting currency/conversion, index tuning, upload file retention, and report-evidence normalization remain unresolved. Validate query plans before adding broad JSONB indexes or extra infrastructure.

@@ -23,7 +23,7 @@
 }
 ```
 
-Codes/status mapping proposal: `400` malformed input, `401` missing/invalid credentials, `403` authorization denied, `404` absent or inaccessible resource, `409` duplicate/conflicting idempotency key when the approved persistence design detects it, `413` body/file too large, `422` schema/semantic validation, `429` rate limit, `500` unexpected server failure, `502`/`503` external investigation dependency failure. Do not imply batch-level `409` detection is available with the current eight-table schema. See [Ingestion Pipeline](INGESTION_PIPELINE.md). Exact mapping requires implementation finalization.
+Codes/status mapping proposal: `400` malformed input, `401` missing/invalid credentials, `403` authorization denied, `404` absent or inaccessible resource, `409` a stable record ID reused with different canonical content, `413` body/file too large, `422` schema/semantic validation, `429` rate limit, `500` unexpected server failure, `502`/`503` external investigation dependency failure. A `409` during ingestion rejects the entire batch; no partial write is committed. See [Ingestion Pipeline](INGESTION_PIPELINE.md). Exact error details require implementation finalization.
 
 ## Authentication
 
@@ -51,7 +51,7 @@ Return key ID, non-secret prefix, creation/revocation metadata. Never return sto
 
 ## SDK ingestion
 
-`POST /api/v1/ingest/batch` uses project API-key authentication (`Authorization: Bearer ...` proposed). It accepts a bounded batch containing `schema_version`, `batch_id`, `traces`, `spans`, and `events`, then validates/normalizes through the shared pipeline. The proposed response may include accepted/rejected status and counts, but persistent batch replay and changed-payload conflict detection are **UNRESOLVED**: the confirmed eight-table schema has no SDK batch ledger. The recommended `ingestion_batches` table is a proposed ninth table and requires project-owner approval. Until then, record-level stable-ID behavior is only a fallback and cannot identify empty-batch replay or complete batch outcomes. Exact shape, atomicity, response codes for partial failures, and retry contract require finalization. See [Ingestion Pipeline](INGESTION_PIPELINE.md), [Database Schema](DATABASE_SCHEMA.md), and [SDK Specification](SDK_SPECIFICATION.md).
+`POST /api/v1/ingest/batch` uses project API-key authentication (`Authorization: Bearer ...` proposed). It accepts a bounded batch containing `schema_version`, and telemetry records; `batch_id` may be included for request correlation only. Validate/normalize the entire input before persisting it in one transaction. The batch is all-or-nothing: exact repeats of stable trace/span/event IDs with identical canonical content are no-ops; an existing ID with different canonical content rejects and rolls back the complete batch. There is no `ingestion_batches` table and no persisted batch-response replay. Exact request/response field shapes and status codes remain to be finalized, but partial acceptance is not supported. See [Ingestion Pipeline](INGESTION_PIPELINE.md), [Database Schema](DATABASE_SCHEMA.md), and [ADR 007](decisions/007-atomic-ingestion-and-record-level-idempotency.md).
 
 ## Historical uploads
 
@@ -100,4 +100,4 @@ Every route must validate types, range/size limits, ownership, and project relat
 
 ## API-wide unresolved items
 
-Pagination convention, exact schemas, payload size, rate limits, API key prefix format, JSONL framing, batch-level idempotency persistence/duplicate conflict response, cost reporting currency/conversion, report synchronous timeout strategy, token refresh, and compatibility/deprecation policy must be decided before API freeze. Do not invent details merely to fill a schema.
+Pagination convention, exact schemas, payload size, rate limits, API key prefix format, JSONL framing, precise duplicate record response representation, cost reporting currency/conversion, report synchronous timeout strategy, token refresh, and compatibility/deprecation policy must be decided before API freeze. Atomic all-or-nothing ingestion and stable record-level idempotency are confirmed; there is no batch-level persistence or partial success. Do not invent details merely to fill a schema.

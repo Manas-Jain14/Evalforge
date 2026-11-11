@@ -1,6 +1,6 @@
 # ADR 004: Converge SDK and historical uploads on one pipeline
 
-- **Status:** Accepted (shared-pipeline requirement confirmed; detailed failure policy unresolved)
+- **Status:** Accepted (shared-pipeline requirement confirmed; atomic and record-level idempotency policy confirmed in ADR 007)
 - **Date:** 2026-11-06
 
 ## Context
@@ -15,9 +15,10 @@ Keep transport adapters separate only through authentication and parsing. Both c
 
 - One canonical persistence and analytics path.
 - Consistent validation and project isolation.
-- Safe retries require an approved idempotency design. The confirmed eight-table schema does not contain a durable SDK batch record.
-- A proposed ninth `ingestion_batches` table is the recommended durable batch-level option, but is **UNRESOLVED pending project-owner approval**. Stable record IDs are the within-eight-table fallback and cannot identify empty-batch replay or complete batch outcomes; see [Database Schema](../DATABASE_SCHEMA.md).
-- Atomic versus partial batch acceptance, duplicate conflict behavior, exact limits, and raw-file staging remain unresolved and must be finalized before contract freeze.
+- Exactly eight initial logical tables; do not add `ingestion_batches`.
+- Process each batch atomically, all-or-nothing. Stable trace/span/event IDs provide record-level idempotency: identical canonical content is a no-op; conflicting content rejects and rolls back the entire batch.
+- Batch IDs are correlation metadata only; no batch response ledger or empty-batch replay detection is provided.
+- Exact limits, duplicate response representation, and raw-file staging remain unresolved and must be finalized before contract freeze.
 
 ## Revisit when
 
